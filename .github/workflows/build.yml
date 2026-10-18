@@ -1,0 +1,54 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar proyecto
+        run: |
+          echo "== Archivos en el repo =="
+          find . -maxdepth 3 -not -path "./.git/*" | head -50
+          if ! find . -name settings.gradle.kts -not -path "./.git/*" | grep -q .; then
+            ZIP=$(find . -name "*.zip" -not -path "./.git/*" | head -n1)
+            if [ -z "$ZIP" ]; then
+              echo "ERROR: no hay settings.gradle.kts ni ningun .zip en el repositorio"
+              exit 1
+            fi
+            echo "Descomprimiendo $ZIP"
+            mkdir -p proyecto
+            unzip -o -q "$ZIP" -d proyecto
+          fi
+          FILE=$(find . -name settings.gradle.kts -not -path "./.git/*" | head -n1)
+          if [ -z "$FILE" ]; then
+            echo "ERROR: el zip no contiene settings.gradle.kts"
+            exit 1
+          fi
+          DIR=$(dirname "$FILE")
+          echo "== Proyecto en: $DIR =="
+          ls -la "$DIR"
+          echo "DIR=$DIR" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Compilar APK
+        run: cd "$DIR" && gradle assembleDebug --stacktrace
+
+      - name: Subir APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SaludBateria-APK
+          path: ${{ env.DIR }}/app/build/outputs/apk/debug/*.apk
